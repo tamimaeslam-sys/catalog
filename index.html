@@ -51,6 +51,9 @@
     .intro p { margin: 0; color: var(--muted); font-size: 13px; }
     .count { color: var(--muted); font-size: 13px; white-space: nowrap; }
     .count strong { margin-left: 6px; color: var(--green-dark); font: 600 23px 'Readex Pro', sans-serif; }
+    .catalog-sections { display: flex; gap: 8px; margin: 8px 0 10px; }
+    .catalog-section { min-height: 38px; border: 1px solid var(--line); border-radius: 5px; padding: 7px 16px; background: #fff; color: var(--ink); font-size: 12px; font-weight: 600; }
+    .catalog-section.active { border-color: var(--green-dark); background: var(--green-dark); color: #fff; }
     .tabs { display: flex; gap: 5px; overflow-x: auto; padding: 0 0 10px; scrollbar-width: thin; }
     .tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 7px; border: 1px solid transparent; border-radius: 5px; padding: 9px 13px; background: transparent; color: #60716b; font-size: 13px; font-weight: 600; white-space: nowrap; }
     .tab:hover { background: #eaf0ed; }
@@ -67,6 +70,8 @@
     .product:hover { transform: translateY(-2px); box-shadow: 0 12px 35px rgba(24, 51, 47, .08); }
     .image-button { display: block; width: 100%; padding: 0; border: 0; background: #f8faf9; cursor: zoom-in; }
     .product img { display: block; width: 100%; height: 220px; border-bottom: 1px solid #edf1ef; background: #f8faf9; object-fit: contain; }
+    .product-image-wrap { position: relative; display: block; }
+    .product-code { position: absolute; top: 10px; right: 10px; min-width: 38px; padding: 4px 9px; border: 1px solid rgba(198, 223, 107, .7); border-radius: 4px; background: rgba(18, 61, 57, .94); color: #fff; font: 700 13px 'Readex Pro', sans-serif; text-align: center; direction: ltr; }
     .image-dialog { position: relative; width: min(1100px, calc(100% - 24px)); max-width: none; max-height: 94vh; padding: 46px 12px 12px; overflow: hidden; border: 0; border-radius: 6px; background: #10201e; }
     .image-dialog img { display: block; max-width: 100%; max-height: 84vh; margin: auto; object-fit: contain; }
     .image-close { position: absolute; top: 8px; left: 8px; display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgba(255, 255, 255, .25); border-radius: 4px; background: rgba(0, 0, 0, .35); color: #fff; font-size: 22px; }
@@ -132,6 +137,7 @@
       .intro p { max-width: 255px; font-size: 12px; line-height: 1.7; }
       .count { display: none; }
       .tabs { margin-inline: -15px; padding-inline: 15px; }
+      .catalog-section { flex: 1; padding-inline: 8px; font-size: 11px; }
       .tab { padding: 8px 10px; font-size: 12px; }
       .toolbar { grid-template-columns: 1fr 1fr; gap: 7px; }
       .search { grid-column: 1 / -1; }
@@ -176,11 +182,17 @@
     </header>
     <main>
       <section class="intro"><div><h2>منتجات الجملة</h2><p>المنتجات المتاحة للعرض والطلب</p></div><div class="count"><strong id="count">٠</strong>منتج</div></section>
+      <nav class="catalog-sections" id="catalogSections" aria-label="أقسام المنتجات">
+        <button class="catalog-section active" type="button" data-catalog-section="shoes" aria-pressed="true">الأحذية والشباشب</button>
+        <button class="catalog-section" type="button" data-catalog-section="fur" aria-pressed="false">الفرو</button>
+      </nav>
       <nav class="tabs" id="tabs" aria-label="الأقسام"></nav>
       <nav class="tabs" id="protanTabs" aria-label="مراحل بروتان" hidden></nav>
+      <nav class="tabs" id="furTabs" aria-label="تصنيفات الفرو" hidden></nav>
       <section class="toolbar">
         <label class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5" stroke-linecap="round"/></svg><input id="search" type="search" placeholder="ابحث بالاسم أو القسم أو السعر" aria-label="بحث"></label>
         <select id="type" aria-label="النوع"><option value="">كل الأنواع</option><option>وش</option><option>صوابع</option><option>كروكس</option><option>فرو</option></select>
+        <input id="furSize" type="search" placeholder="المقاس" aria-label="فلترة حسب المقاس" hidden>
         <input id="min" type="number" min="0" inputmode="numeric" placeholder="أقل سعر" aria-label="أقل سعر">
         <input id="max" type="number" min="0" inputmode="numeric" placeholder="أعلى سعر" aria-label="أعلى سعر">
       </section>
@@ -220,6 +232,9 @@
     const CATEGORIES = ['حريمي', 'رجالي', 'شبابي', 'بيبي', 'بناتي', 'أولادي', 'صيدلية'];
     const PROTAN = 'بروتان';
     const PROTAN_STAGES = ['شبابي', 'رجالي', 'أولادي', 'بيبي'];
+    const FUR_SECTION = 'fur';
+    const FUR_NAME = 'الفرو';
+    const FUR_CATEGORIES = ['حريمي', 'رجالي', 'شبابي', 'بيبي', 'بناتي', 'أولادي', 'أطفال', 'صيدلية'];
     const ALL = 'الكل';
     const client = window.supabase?.createClient(SUPABASE_URL, SUPABASE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false }
@@ -227,8 +242,10 @@
     let products = [];
     const cart = new Map();
     let lastInvoice = null;
+    let activeSection = 'shoes';
     let activeCategory = ALL;
     let activeProtanStage = ALL;
+    let activeFurCategory = ALL;
 
     const $ = (selector) => document.querySelector(selector);
     const number = (value) => new Intl.NumberFormat('ar-EG').format(value);
@@ -236,32 +253,63 @@
 
     function categoryOf(product) { return product.group_name || product.category || ''; }
     function productLabel(product) {
+      if (product.catalog_section === FUR_SECTION) {
+        const code = product.fur_code == null ? '' : ` · كود ${String(product.fur_code).padStart(2, '0')}`;
+        return `${FUR_NAME} · ${product.category}${product.fur_size ? ` · مقاس ${product.fur_size}` : ''}${code}`;
+      }
       if (product.group_name) return `${product.group_name} · ${product.category}`;
       return product.product_type ? `${product.category} · ${product.product_type}` : product.category;
     }
 
     function renderTabs() {
+      const shoes = products.filter((product) => product.catalog_section !== FUR_SECTION);
       const categories = [ALL, ...CATEGORIES, PROTAN];
       $('#tabs').innerHTML = categories.map((category) => {
-        const count = category === ALL ? products.length : category === PROTAN
-          ? products.filter((product) => product.group_name === PROTAN).length
-          : products.filter((product) => !product.group_name && product.category === category).length;
+        const count = category === ALL ? shoes.length : category === PROTAN
+          ? shoes.filter((product) => product.group_name === PROTAN).length
+          : shoes.filter((product) => !product.group_name && product.category === category).length;
         return `<button class="tab ${activeCategory === category ? 'active' : ''}" type="button" data-category="${safe(category)}">${safe(category)}<small>${number(count)}</small></button>`;
       }).join('');
-      const grouped = products.filter((product) => product.group_name === PROTAN);
+      const grouped = shoes.filter((product) => product.group_name === PROTAN);
       $('#protanTabs').hidden = activeCategory !== PROTAN;
       $('#protanTabs').innerHTML = [ALL, ...PROTAN_STAGES].map((stage) => {
         const count = stage === ALL ? grouped.length : grouped.filter((product) => product.category === stage).length;
         return `<button class="tab ${activeProtanStage === stage ? 'active' : ''}" type="button" data-stage="${safe(stage)}">${safe(stage)}<small>${number(count)}</small></button>`;
       }).join('');
+      const furProducts = products.filter((product) => product.catalog_section === FUR_SECTION);
+      $('#furTabs').innerHTML = [ALL, ...FUR_CATEGORIES].map((category) => {
+        const count = category === ALL ? furProducts.length : furProducts.filter((product) => product.category === category).length;
+        return `<button class="tab ${activeFurCategory === category ? 'active' : ''}" type="button" data-fur-category="${safe(category)}">${safe(category)}<small>${number(count)}</small></button>`;
+      }).join('');
+      $('#tabs').hidden = activeSection === FUR_SECTION;
+      $('#protanTabs').hidden = activeSection === FUR_SECTION || activeCategory !== PROTAN;
+      $('#furTabs').hidden = activeSection !== FUR_SECTION;
+      $('#type').hidden = activeSection === FUR_SECTION;
+      $('#furSize').hidden = activeSection !== FUR_SECTION;
+      document.querySelectorAll('[data-catalog-section]').forEach((button) => {
+        const selected = button.dataset.catalogSection === activeSection;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-pressed', String(selected));
+      });
     }
 
     function filteredProducts() {
       const query = $('#search').value.trim().toLocaleLowerCase('ar');
       const type = $('#type').value;
+      const size = $('#furSize').value.trim().toLocaleLowerCase('ar');
       const min = $('#min').value === '' ? null : Number($('#min').value);
       const max = $('#max').value === '' ? null : Number($('#max').value);
       return products.filter((product) => {
+        if (activeSection === FUR_SECTION) {
+          const text = `${product.name || ''} ${product.category || ''} ${product.fur_size || ''} ${product.price || ''}`.toLocaleLowerCase('ar');
+          return product.catalog_section === FUR_SECTION
+            && (activeFurCategory === ALL || product.category === activeFurCategory)
+            && (!size || String(product.fur_size || '').toLocaleLowerCase('ar').includes(size))
+            && (!query || text.includes(query))
+            && (min === null || Number(product.price) >= min)
+            && (max === null || Number(product.price) <= max);
+        }
+        if (product.catalog_section === FUR_SECTION) return false;
         const isProtan = product.group_name === PROTAN;
         const categoryMatch = activeCategory === ALL
           || (activeCategory === PROTAN ? isProtan && (activeProtanStage === ALL || product.category === activeProtanStage)
@@ -275,7 +323,10 @@
     function render() {
       renderTabs();
       const visible = filteredProducts();
-      $('#count').textContent = number(products.length);
+      const sectionProducts = products.filter((product) => activeSection === FUR_SECTION
+        ? product.catalog_section === FUR_SECTION
+        : product.catalog_section !== FUR_SECTION);
+      $('#count').textContent = number(sectionProducts.length);
       $('#result').textContent = `${number(visible.length)} نتيجة`;
       if (!visible.length) {
         $('#grid').innerHTML = '<div class="empty"><strong>لا توجد منتجات مطابقة</strong><p>جرّب تغيير البحث أو الفلاتر.</p></div>';
@@ -284,7 +335,7 @@
       $('#grid').innerHTML = visible.map((product) => `
         <article class="product">
           <button class="image-button" type="button" data-preview="${safe(product.image_url)}" data-alt="${safe(product.name || product.category)}" aria-label="عرض صورة ${safe(product.name || product.category)}">
-            <img src="${safe(product.image_url)}" alt="" loading="lazy">
+            <span class="product-image-wrap"><img src="${safe(product.image_url)}" alt="" loading="lazy">${product.catalog_section === FUR_SECTION && product.fur_code != null ? `<span class="product-code">${safe(String(product.fur_code).padStart(2, '0'))}</span>` : ''}</span>
           </button>
           <div class="info"><div class="line"><h3 class="name">${safe(product.name || product.category)}</h3><span class="tag">${safe(productLabel(product))}</span></div>
           <div class="price">${number(product.price)} <small>جنيه</small></div>
@@ -317,7 +368,7 @@
       const lines = invoice.items.map((item) => `
         <div class="receipt-row">
           <img src="${safe(item.image_url)}" alt="${safe(item.name)}">
-          <span><strong>${safe(item.name)}</strong><br>${safe(item.group_name ? `${item.group_name} · ${item.category}` : item.product_type ? `${item.category} · ${item.product_type}` : item.category)}</span>
+          <span><strong>${safe(item.name)}</strong><br>${safe(productLabel(item))}</span>
           <span>الكمية: ${safe(item.quantity)}</span>
           <span>${money(item.unit_price)} جنيه</span>
           <span class="receipt-line-total">${money(item.line_total)} جنيه</span>
@@ -355,9 +406,12 @@
       const items = [...cart.values()].map(({ product, quantity }) => ({
         product_id: product.id,
         name: product.name || product.category,
+        catalog_section: product.catalog_section || 'shoes',
         group_name: product.group_name || '',
         category: product.category,
         product_type: product.group_name === PROTAN ? '' : product.product_type || '',
+        fur_size: product.catalog_section === FUR_SECTION ? product.fur_size || '' : '',
+        fur_code: product.catalog_section === FUR_SECTION ? product.fur_code : null,
         unit_price: Number(product.price),
         quantity,
         line_total: lineTotal({ product, quantity }),
@@ -401,11 +455,11 @@
       $('#status').textContent = 'جارٍ تحميل المنتجات...';
       $('#status').classList.remove('ready', 'error');
       const { data, error } = await client.from('products')
-        .select('id,name,group_name,category,product_type,price,image_url,is_active,created_at')
+        .select('id,name,group_name,category,product_type,price,image_url,is_active,catalog_section,fur_size,fur_code,created_at')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (error) {
-        $('#status').textContent = error.code === '42703' ? 'شغّل SQL المحدّث لإضافة is_active' : 'تعذر الاتصال بقاعدة البيانات';
+        $('#status').textContent = error.code === '42703' ? 'شغّل SQL المحدّث لمخطط المنتجات' : 'تعذر الاتصال بقاعدة البيانات';
         $('#status').classList.add('error');
         return;
       }
@@ -468,13 +522,25 @@
       activeProtanStage = ALL;
       render();
     });
+    $('#catalogSections').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-catalog-section]');
+      if (!button) return;
+      activeSection = button.dataset.catalogSection;
+      render();
+    });
     $('#protanTabs').addEventListener('click', (event) => {
       const button = event.target.closest('[data-stage]');
       if (!button) return;
       activeProtanStage = button.dataset.stage;
       render();
     });
-    ['search', 'type', 'min', 'max'].forEach((id) => $('#' + id).addEventListener('input', render));
+    $('#furTabs').addEventListener('click', (event) => {
+      const button = event.target.closest('[data-fur-category]');
+      if (!button) return;
+      activeFurCategory = button.dataset.furCategory;
+      render();
+    });
+    ['search', 'type', 'furSize', 'min', 'max'].forEach((id) => $('#' + id).addEventListener('input', render));
     $('#refresh').addEventListener('click', loadProducts);
     loadProducts();
   </script>
